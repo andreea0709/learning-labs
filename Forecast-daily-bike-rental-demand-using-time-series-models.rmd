@@ -1,0 +1,130 @@
+---
+title: "Forecast daily bike rental demand using time series models"
+author: "Andreea Penghis"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# About Data Analysis Report
+
+This RMarkdown file contains the report of the data analysis done for the project on forecasting daily bike rental demand using time series models in R. It contains analysis such as data exploration, summary statistics and building the time series models. The final report was completed on `r date()`. 
+
+**Data Description:**
+
+This dataset contains the daily count of rental bike transactions between years 2011 and 2012 in Capital bikeshare system with the corresponding weather and seasonal information.
+
+**Data Source:** https://archive.ics.uci.edu/ml/datasets/bike+sharing+dataset
+
+
+## Load data and install packages
+
+```{r}
+## Import required packages
+setwd("D:\\Projects\\Forecast bikeshare demand using time series models in R")
+daydf <- read.csv("day.csv", header = TRUE, sep =",")
+hourdf <- read.csv("hour.csv", header = TRUE, sep =",")
+if(!require(timetk)) install.packages("timetk")
+library(timetk)
+library(plotly)
+library(dplyr)
+```
+
+
+## Describe and explore the data
+
+```{r}
+head(daydf)
+head(hourdf)
+summary(daydf)
+summary(hourdf)
+```
+
+
+
+# Create interactive time series plots
+
+```{r}
+#convert date column to date type
+daydf$dteday <- as.Date(daydf$dteday)
+#create a time series tibble
+day_ts <- daydf %>%
+  select(dteday, cnt) %>%
+  tk_tbl() %>%
+  mutate(dteday = as.Date(dteday))
+#plot interactive time series
+p <- day_ts %>%
+  plot_ly(x = ~dteday, y = ~cnt, type = "scatter", mode = "lines") %>%
+  layout(title = "Daily bike rental counts", 
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Count"))
+p
+
+
+```
+
+
+
+
+# Smooth time series data
+
+```{r}
+library(zoo)
+#calculate a 7-day moving average to smooth daily counts
+daydf$cnt_ma7 <- rollmean(daydf$cnt, k=7, fill = NA, align = "right")
+#plot original and smoothed series
+library(ggplot2)
+ggplot(daydf, aes(x = dteday))+
+  geom_line(aes(y = cnt), color = "blue", alpha = 0.5) +
+  geom_line(aes(y = cnt_ma7), color = "red", size = 1)+
+  labs(title = "Daly bike rental counts with a 7-day moving average", x = "Date", y= "Count") + 
+  theme_minimal()
+```
+
+
+
+# Decompse and access the stationarity of time series data
+
+```{r}
+library(forecast)
+library(tseries)
+#convert to time series obj 
+cnt_ts <- ts(daydf$cnt, frequency = 365, start = c(2011, 1))
+#decompose time series
+decomp <- stl(cnt_ts, s.window = "periodic")
+plot(decomp)
+#augmented Dickey-Fuller test for stationarity
+adf_test <- adf.test(cnt_ts, alternative = "stationary")
+print(adf_test)
+```
+
+
+
+# Fit and forecast time series data using ARIMA models
+
+```{r}
+#fit ARIMA model automatically
+fit <- auto.arima(cnt_ts)
+#summary of the model
+summary(fit)
+#forecast next 30 days
+forecast_horizon <- 30
+fc <- forecast(fit, h = forecast_horizon)
+#plot forecast
+plot(fc, main= "ARIMA forecast of daily bike rentals")
+```
+
+
+# Findings and Conclusions
+- The daily bike rental demand shows clear seasonality and trend components.
+- The 7-day moving average smooths out short-term fluctuations effectively.
+- The time series decomposition confirms strong seasonal patterns.
+- The Augmented Dickey-Fuller test indicates the series is non-stationary (based on p-value).
+- The ARIMA model selected by `auto.arima` fits the data well and provides reasonable forecasts.
+- The ARIMA model has successfully generated a forecast of daily bike rentals for the future time period (early 2013).
+- The forecast (shown in blue) indicates the expected number of bike rentals along with the confidence intervals (gray shaded area).
+- The forecast captures the general trend and seasonality seen in the historical data.
+- The confidence bands show increasing uncertainty as we move further into the forecast horizon, which is typical for time series forecasting.
+- The model seems to anticipate a continuation of the rental patterns with possible fluctuations but does not capture any major abrupt changes.
+- Recommendations include considering weather and holiday effects in future models for improved accuracy and refining the model by examining residuals to check for non-randomness or adding additional explanatory variables if needed, to improve forecast accuracy.
